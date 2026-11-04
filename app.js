@@ -227,9 +227,9 @@
   function loginHtml() {
     const msg = S.mensajeLogin ? `<div class="err">${esc(S.mensajeLogin)}</div>` : '';
     const instalar = !standalone() && plataforma() === 'iOS'
-      ? '<div class="info"><b>iPhone:</b> para recibir alertas toca <b>Compartir</b> (□↑) y luego <b>Añadir a pantalla de inicio</b>. Abre Safety Alert desde ese icono.</div>'
+      ? '<div class="info"><b>iPhone:</b> para recibir alertas toca <b>Compartir</b> (□↑) y luego <b>Añadir a pantalla de inicio</b>. Abre  desde ese icono.</div>'
       : (!standalone() ? '<div class="info">Para mejor funcionamiento instala la app: menú del navegador (⋮) → <b>Instalar aplicación</b>.</div>' : '');
-    return `<div class="login"><img class="logo" src="icons/icon-192.png" alt=""><h1>Safety Alert</h1><p class="muted">${esc(CFG.empresa || '')}</p>
+    return `<div class="login"><img class="logo" src="icons/icon-192.png" alt=""><h1></h1><p class="muted">${esc(CFG.empresa || '')}</p>
       <form data-form="login"><label>Usuario</label><input name="usuario" autocapitalize="none" autocomplete="username" required>
       <label>Contraseña</label><input name="clave" type="password" autocomplete="current-password" required>
       <div id="msg">${msg}</div><button class="btn full" style="margin-top:16px">Entrar</button></form>${instalar}</div>`;
@@ -259,7 +259,7 @@
 
   const VISTAS = {
     inicio: {
-      titulo: 'Safety Alert : Cerveceria Hodnureña',
+      titulo: 'Safety Alert : Cerveceria Hondureña',
       async html() {
         const [p, rep] = await Promise.all([chequear(), esGestion() ? api('reportesLista', { estado: 'Abierto' }) : null]);
         const alertas = p ? p.alertas : S.alertas;
