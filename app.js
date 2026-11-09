@@ -1,5 +1,5 @@
 'use strict';
-/* Safety Alert - aplicación */
+/* SafetyAlert - aplicación (sin dependencias, sin compilar) */
 (function () {
   const CFG = globalThis.SA_CONFIG;
   const FB = 'https://www.gstatic.com/firebasejs/10.14.1';
@@ -199,7 +199,7 @@
     const raiz = RAICES.includes(S.view);
     const pill = S.perfil ? `<span class="pill">${S.perfil.disponiblePlanta ? '🟢 En planta' : '⚪ Fuera'}</span>` : '';
     return `<div class="top">${conBack && !raiz ? '<button class="back" data-act="atras" aria-label="Atrás">‹</button>' : ''}<h1>${esc(titulo)}</h1>${pill}</div>
-      <main id="main">${main}</main>
+      <main id="main" class="${S.view === 'dashboard' ? 'ancha' : ''}">${main}</main>
       <nav class="nav">${tabsDe().map((t) => `<button data-act="tab" data-v="${t.id}" class="${(S.view === t.id || S.padre === t.id) ? 'on' : ''}"><span class="ic">${t.ic}</span>${t.n}</button>`).join('')}</nav>`;
   }
 
@@ -223,13 +223,80 @@
     }
   }
 
+  // ---------- gráficas (SVG propio, sin librerías) ----------
+  const COL = { emer: '#b71c1c', sim: '#2a78d6', asiste: '#2e7d32', fuera: '#2a78d6', sin: '#c98500', op: '#2e7d32', inc: '#c98500', prob: '#b71c1c', nodisp: '#6250d6', azul: '#2a78d6' };
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const trunc = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + '…' : String(t));
+  const mesTxt = (k) => MESES[Number(k.slice(5, 7)) - 1] + ' ' + k.slice(2, 4);
+  const fCorta = (f) => new Date(f).toLocaleDateString('es-HN', { day: '2-digit', month: 'short' });
+  function fmtSeg(s) {
+    if (s === null || s === undefined) return '—';
+    s = Math.round(s);
+    if (s < 60) return s + ' s';
+    if (s < 3600) return Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
+    return Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min';
+  }
+  const leyenda = (items) => `<div class="leyenda">${items.map((i) => `<span><i style="background:${i.c}"></i>${esc(i.n)}</span>`).join('')}</div>`;
+  const tablaDatos = (cols, filas) => `<details class="tabla-datos"><summary>Ver datos en tabla</summary><div class="tw"><table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${filas.map((f) => `<tr>${f.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+
+  // Barras horizontales (apiladas si una fila trae varios segmentos)
+  function barrasH(filas, o) {
+    o = o || {};
+    const W = 640, Lw = o.lw || 150, Rw = o.total ? 46 : 12, bh = 22, gap = 10, top = 4, pw = W - Lw - Rw;
+    const max = o.max || Math.max(1, ...filas.map((f) => f.segs.reduce((s, x) => s + x.v, 0)));
+    const H = top + filas.length * (bh + gap);
+    let g = '';
+    filas.forEach((f, i) => {
+      const y = top + i * (bh + gap); let x = Lw;
+      g += `<text class="gtxt" x="${Lw - 8}" y="${y + bh / 2 + 4}" text-anchor="end">${esc(trunc(f.label, o.cut || 24))}</text>`;
+      f.segs.forEach((sg) => {
+        if (!(sg.v > 0)) return;
+        const w = (sg.v / max) * pw;
+        g += `<g><title>${esc(f.label + ' · ' + sg.n + ': ' + sg.v)}</title><rect x="${x}" y="${y}" width="${w}" height="${bh}" rx="3" fill="${sg.c}" stroke="#fff" stroke-width="2"/>`;
+        if (w >= 24) g += `<text x="${x + w / 2}" y="${y + bh / 2 + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="${sg.c === COL.sin ? '#1d1b1a' : '#fff'}">${sg.v}</text>`;
+        g += '</g>'; x += w;
+      });
+      if (o.total) g += `<text class="gtxt" x="${x + 6}" y="${y + bh / 2 + 4}" font-weight="700">${f.segs.reduce((s, z) => s + z.v, 0)}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" class="svgg" role="img" aria-label="${esc(o.aria || '')}">${g}</svg>`;
+  }
+
+  // Columnas agrupadas por mes: emergencias y simulacros
+  function columnasMes(meses) {
+    const W = 640, H = 250, L = 34, R = 8, T = 16, B = 34, pw = W - L - R, ph = H - T - B;
+    const max = Math.max(1, ...meses.map((m) => Math.max(m.emergencias, m.simulacros)));
+    const tope = Math.max(4, Math.ceil(max / 4) * 4);
+    const gw = pw / meses.length, bw = Math.min(26, (gw - 10) / 2);
+    let g = '';
+    for (let i = 0; i <= 4; i++) {
+      const y = T + ph - (ph * i) / 4;
+      g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#e2dcd6" stroke-width="1"/><text class="gmut" x="${L - 6}" y="${y + 4}" text-anchor="end">${(tope * i) / 4}</text>`;
+    }
+    meses.forEach((m, i) => {
+      const cx = L + i * gw + gw / 2;
+      [[m.emergencias, COL.emer, 'Emergencias', cx - bw - 1], [m.simulacros, COL.sim, 'Simulacros', cx + 1]].forEach(([v, c, n, x]) => {
+        const h = (v / tope) * ph, y = T + ph - h;
+        if (v > 0) {
+          g += `<g><title>${esc(mesTxt(m.mes) + ' · ' + n + ': ' + v)}</title><rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="3" fill="${c}"/></g>`;
+          if (meses.length <= 8) g += `<text class="gtxt" x="${x + bw / 2}" y="${y - 4}" text-anchor="middle" font-size="12" font-weight="700">${v}</text>`;
+        }
+      });
+      g += `<text class="gmut" x="${cx}" y="${H - 12}" text-anchor="middle">${esc(mesTxt(m.mes))}</text>`;
+    });
+    g += `<line x1="${L}" x2="${W - R}" y1="${T + ph}" y2="${T + ph}" stroke="#8a8580" stroke-width="1"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" class="svgg" role="img" aria-label="Alertas por mes, emergencias y simulacros">${g}</svg>`;
+  }
+
+  const kpi = (n, t, sub) => `<div class="kpi"><div class="n">${esc(n)}</div><div class="t">${esc(t)}</div>${sub ? `<div class="s">${esc(sub)}</div>` : ''}</div>`;
+  const grafica = (titulo, cuerpo, extra) => `<div class="card graf ${extra || ''}"><h3>${esc(titulo)}</h3>${cuerpo}</div>`;
+
   // ---------- vistas ----------
   function loginHtml() {
     const msg = S.mensajeLogin ? `<div class="err">${esc(S.mensajeLogin)}</div>` : '';
     const instalar = !standalone() && plataforma() === 'iOS'
-      ? '<div class="info"><b>iPhone:</b> para recibir alertas toca <b>Compartir</b> (□↑) y luego <b>Añadir a pantalla de inicio</b>. Abre Safety Alert desde ese icono.</div>'
+      ? '<div class="info"><b>iPhone:</b> para recibir alertas toca <b>Compartir</b> (□↑) y luego <b>Añadir a pantalla de inicio</b>. Abre SafetyAlert desde ese icono.</div>'
       : (!standalone() ? '<div class="info">Para mejor funcionamiento instala la app: menú del navegador (⋮) → <b>Instalar aplicación</b>.</div>' : '');
-    return `<div class="login"><img class="logo" src="icons/icon-192.png" alt=""><h1>Safety Alert</h1><p class="muted">${esc(CFG.empresa || '')}</p>
+    return `<div class="login"><img class="logo" src="icons/icon-192.png" alt=""><h1>SafetyAlert</h1><p class="muted">${esc(CFG.empresa || '')}</p>
       <form data-form="login"><label>Usuario</label><input name="usuario" autocapitalize="none" autocomplete="username" required>
       <label>Contraseña</label><input name="clave" type="password" autocomplete="current-password" required>
       <div id="msg">${msg}</div><button class="btn full" style="margin-top:16px">Entrar</button></form>${instalar}</div>`;
@@ -259,7 +326,7 @@
 
   const VISTAS = {
     inicio: {
-      titulo: 'Safety Alert: Cerveceria Hondureña',
+      titulo: 'SafetyAlert',
       async html() {
         const [p, rep] = await Promise.all([chequear(), esGestion() ? api('reportesLista', { estado: 'Abierto' }) : null]);
         const alertas = p ? p.alertas : S.alertas;
@@ -388,8 +455,67 @@
       titulo: 'Gestión',
       async html() {
         const b = (act, ic, t, d) => `<div class="card" data-act="${act}" style="cursor:pointer"><div class="row"><span style="font-size:28px">${ic}</span><div class="grow"><h3>${t}</h3><div class="muted small">${d}</div></div>›</div></div>`;
-        let h = b('irPersonal', '👷', 'Personal en planta', 'Quién está disponible y quién no');
+        let h = b('irDashboard', '📊', 'Dashboard', 'Gráficas de alertas, respuestas y equipos') + b('irPersonal', '👷', 'Personal en planta', 'Quién está disponible y quién no');
         if (esGestion()) h += b('irReportes', '🧯', 'Reportes de equipos', 'Incompletos, con problemas o no disponibles') + b('irUsuarios', '👥', 'Usuarios', 'Crear brigadistas, supervisores y personal de seguridad') + b('irCatalogos', '🏭', 'Unidades y áreas', 'Unidad, departamento, área y subárea') ;
+        return h;
+      }
+    },
+
+    dashboard: {
+      titulo: 'Dashboard', padre: 'gestion',
+      async html(p) {
+        const dias = p.dias || 90;
+        const d = await api('dashboard', { dias });
+        const k = d.kpi;
+        const pc = (v) => (v === null || v === undefined ? '—' : v + ' %');
+        let h = `<div class="dash-top"><div class="chips">${[30, 90, 180, 365].map((n) => `<button data-act="dashDias" data-d="${n}" class="${dias === n ? 'on' : ''}">${n === 365 ? '1 año' : n + ' días'}</button>`).join('')}</div>
+          <div class="btns"><button class="btn chico gris" data-act="dashActualizar">↻ Actualizar</button><button class="btn chico gris" data-act="pantallaCompleta">⛶ Pantalla completa</button><button class="btn chico gris" data-act="imprimir">🖨 Imprimir</button></div></div>`;
+        h += `<div class="kpis">${kpi(k.alertas, 'Alertas', k.emergencias + ' emergencias · ' + k.simulacros + ' simulacros')}
+          ${kpi(pc(k.tasaRespuesta), 'Respuesta a las alertas', 'Asistencia: ' + pc(k.tasaAsistencia))}
+          ${kpi(fmtSeg(k.medianaRespuestaSeg), 'Tiempo típico de respuesta', 'Emergencias: ' + fmtSeg(k.medianaEmergenciaSeg))}
+          ${kpi(k.enPlanta + ' de ' + d.totalPersonal, 'Personal en planta ahora')}
+          ${kpi(k.equiposConProblema + ' de ' + k.equiposTotal, 'Equipos con problemas')}
+          ${kpi(k.reportesAbiertos, 'Reportes abiertos', k.diasResolucion !== null ? 'Se resuelven en ~' + k.diasResolucion + ' días' : '')}</div>`;
+
+        const leyAlertas = leyenda([{ c: COL.emer, n: 'Emergencias' }, { c: COL.sim, n: 'Simulacros' }]);
+        const hayAlertas = d.meses.length && k.alertas > 0;
+        h += '<div class="dash">';
+        h += grafica('Alertas por mes', hayAlertas ? leyAlertas + columnasMes(d.meses) + tablaDatos(['Mes', 'Emergencias', 'Simulacros'], d.meses.map((m) => [mesTxt(m.mes), m.emergencias, m.simulacros])) : '<div class="vacio">Sin alertas en este periodo</div>', 'full');
+
+        h += grafica('Alertas por tipo de evento', d.porTipoEvento.length
+          ? leyAlertas + barrasH(d.porTipoEvento.map((t) => ({ label: t.subtipo, segs: [{ v: t.emergencias, c: COL.emer, n: 'Emergencias' }, { v: t.simulacros, c: COL.sim, n: 'Simulacros' }] })), { total: true, lw: 160, aria: 'Alertas por tipo de evento' }) + tablaDatos(['Evento', 'Emergencias', 'Simulacros'], d.porTipoEvento.map((t) => [t.subtipo, t.emergencias, t.simulacros]))
+          : '<div class="vacio">Sin alertas en este periodo</div>');
+
+        const leyResp = leyenda([{ c: COL.asiste, n: 'Asisten' }, { c: COL.fuera, n: 'Fuera de planta' }, { c: COL.sin, n: 'Sin responder' }]);
+        h += grafica('Respuestas en las últimas alertas', d.ultimas.length
+          ? leyResp + barrasH(d.ultimas.map((a) => ({ label: (a.tipo === 'Simulacro' ? '📣 ' : '🚨 ') + fCorta(a.fecha) + ' ' + a.subtipo, segs: [{ v: a.asisten, c: COL.asiste, n: 'Asisten' }, { v: a.fuera, c: COL.fuera, n: 'Fuera de planta' }, { v: a.sin, c: COL.sin, n: 'Sin responder' }] })), { max: Math.max(d.totalPersonal, 1), lw: 210, cut: 34, aria: 'Respuestas por alerta' }) + `<div class="muted small">Sobre el personal activo actual (${d.totalPersonal} personas).</div>` + tablaDatos(['Alerta', 'Asisten', 'Fuera', 'Sin responder'], d.ultimas.map((a) => [a.tipo + ' ' + fCorta(a.fecha) + ' ' + a.subtipo, a.asisten, a.fuera, a.sin]))
+          : '<div class="vacio">Sin alertas en este periodo</div>');
+
+        const e = d.equiposEstado;
+        const filasEst = [['Operativo', COL.op], ['Incompleto', COL.inc], ['Con problema', COL.prob], ['No disponible', COL.nodisp]];
+        const valEst = [e.Operativo, e.Incompleto, e.ConProblema, e.NoDisponible];
+        h += grafica('Estado de los equipos', k.equiposTotal
+          ? barrasH(filasEst.map(([n, c], i) => ({ label: n, segs: [{ v: valEst[i], c, n }] })), { total: true, lw: 120, aria: 'Equipos por estado' }) + tablaDatos(['Estado', 'Equipos'], filasEst.map(([n], i) => [n, valEst[i]]))
+          : '<div class="vacio">Aún no hay equipos registrados</div>');
+
+        const v = d.vencimientos;
+        const filasVen = [['Vencidos', COL.prob, v.vencidos], ['Vencen en 30 días', COL.inc, v.hasta30], ['En 31 a 90 días', COL.azul, v.hasta90], ['Más de 90 días', COL.op, v.masDe90]];
+        const hayVen = filasVen.some((f) => f[2] > 0);
+        h += grafica('Vencimientos de equipos', hayVen
+          ? barrasH(filasVen.map(([n, c, x]) => ({ label: n, segs: [{ v: x, c, n }] })), { total: true, lw: 130, aria: 'Vencimientos' }) + tablaDatos(['Plazo', 'Equipos'], filasVen.map(([n, , x]) => [n, x]))
+          : '<div class="vacio">Ningún equipo tiene fecha de vencimiento</div>');
+
+        h += grafica('Equipos por tipo', d.equiposTipo.length
+          ? leyenda([{ c: COL.op, n: 'Operativos' }, { c: COL.prob, n: 'Con problema' }]) + barrasH(d.equiposTipo.map((t) => ({ label: t.tipo, segs: [{ v: t.total - t.conProblema, c: COL.op, n: 'Operativos' }, { v: t.conProblema, c: COL.prob, n: 'Con problema' }] })), { total: true, lw: 210, cut: 34, aria: 'Equipos por tipo' }) + tablaDatos(['Tipo', 'Total', 'Con problema'], d.equiposTipo.map((t) => [t.tipo, t.total, t.conProblema]))
+          : '<div class="vacio">Aún no hay equipos registrados</div>');
+
+        const rp = d.reportesProblema;
+        const filasRep = [['Incompleto', rp.Incompleto], ['Con problema', rp.ConProblema], ['No disponible', rp.NoDisponible]];
+        h += grafica('Reportes de equipos en el periodo', d.reportesRango
+          ? barrasH(filasRep.map(([n, x]) => ({ label: n, segs: [{ v: x, c: COL.azul, n }] })), { total: true, lw: 120, aria: 'Reportes por tipo de problema' }) + tablaDatos(['Problema', 'Reportes'], filasRep)
+          : '<div class="vacio">Sin reportes en este periodo</div>');
+        h += '</div>';
+        h += `<p class="muted small">Actualizado ${esc(fh(d.generado))} · Periodo: últimos ${dias} días · Los porcentajes se calculan sobre el personal activo actual.</p>`;
         return h;
       }
     },
@@ -503,7 +629,7 @@
           <div class="info" style="margin-top:10px">Para que suene aunque el teléfono esté en silencio, sigue la guía de configuración del teléfono (Android: importancia “Urgente” y excepción de No molestar).</div></div>
           <div class="card"><h3>Cambiar contraseña</h3>${claveForm(false).replace('class="card"', '')}</div>
           <button class="btn sec full" data-act="salir">Cerrar sesión</button>
-          <p class="muted small" style="text-align:center">Safety Alert · ${esc(CFG.empresa || '')}</p>`;
+          <p class="muted small" style="text-align:center">SafetyAlert · ${esc(CFG.empresa || '')}</p>`;
       }
     }
   };
@@ -540,6 +666,16 @@
     verAlerta: (d) => go('alertaDetalle', { id: d.id }),
     irReportes: () => go('reportes', {}),
     irPersonal: () => go('personal', {}),
+    irDashboard: () => go('dashboard', { dias: 90 }),
+    dashDias: (d) => go('dashboard', { dias: Number(d.d) }, true),
+    dashActualizar: () => render(),
+    imprimir: () => window.print(),
+    pantallaCompleta: () => {
+      const el = document.documentElement;
+      if (document.fullscreenElement) { document.exitFullscreen(); return; }
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => toast('No se pudo activar la pantalla completa'));
+      else toast('Este navegador no permite pantalla completa. Úsalo en una computadora.');
+    },
     irUsuarios: () => { S.stack = [{ view: 'gestion', params: {} }]; S.view = 'usuarios'; S.params = {}; render(); },
     irCatalogos: () => go('catalogos', {}),
     silenciar: () => Sirena.silenciar(),
@@ -663,6 +799,9 @@
     catch (err) { if (msg) msg.innerHTML = `<div class="err">${esc(err.message)}</div>`; else toast(err.message); }
     finally { if (btn && btn.isConnected) btn.disabled = false; }
   });
+
+  document.addEventListener('fullscreenchange', () => { document.body.classList.toggle('presenta', !!document.fullscreenElement); });
+  setInterval(() => { if (S.view === 'dashboard' && document.fullscreenElement && document.visibilityState === 'visible') render(); }, 60000);
 
   // ---------- arranque ----------
   async function iniciarSesion() {
