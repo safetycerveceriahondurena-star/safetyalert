@@ -1,5 +1,5 @@
 'use strict';
-/* SafetyAlert - aplicación (sin dependencias, sin compilar) */
+/* Safety Alert - aplicación) */
 (function () {
   const CFG = globalThis.SA_CONFIG;
   const FB = 'https://www.gstatic.com/firebasejs/10.14.1';
@@ -294,9 +294,9 @@
   function loginHtml() {
     const msg = S.mensajeLogin ? `<div class="err">${esc(S.mensajeLogin)}</div>` : '';
     const instalar = !standalone() && plataforma() === 'iOS'
-      ? '<div class="info"><b>iPhone:</b> para recibir alertas toca <b>Compartir</b> (□↑) y luego <b>Añadir a pantalla de inicio</b>. Abre SafetyAlert desde ese icono.</div>'
+      ? '<div class="info"><b>iPhone:</b> para recibir alertas toca <b>Compartir</b> (□↑) y luego <b>Añadir a pantalla de inicio</b>. Abre Safety Alert desde ese icono.</div>'
       : (!standalone() ? '<div class="info">Para mejor funcionamiento instala la app: menú del navegador (⋮) → <b>Instalar aplicación</b>.</div>' : '');
-    return `<div class="login"><img class="logo" src="icons/icon-192.png" alt=""><h1>SafetyAlert</h1><p class="muted">${esc(CFG.empresa || '')}</p>
+    return `<div class="login"><img class="logo" src="icons/icon-192.png" alt=""><h1>Safety Alert</h1><p class="muted">${esc(CFG.empresa || '')}</p>
       <form data-form="login"><label>Usuario</label><input name="usuario" autocapitalize="none" autocomplete="username" required>
       <label>Contraseña</label><input name="clave" type="password" autocomplete="current-password" required>
       <div id="msg">${msg}</div><button class="btn full" style="margin-top:16px">Entrar</button></form>${instalar}</div>`;
@@ -326,7 +326,7 @@
 
   const VISTAS = {
     inicio: {
-      titulo: 'SafetyAlert',
+      titulo: 'Safety Alert: Cerveceria Hondureña',
       async html() {
         const [p, rep] = await Promise.all([chequear(), esGestion() ? api('reportesLista', { estado: 'Abierto' }) : null]);
         const alertas = p ? p.alertas : S.alertas;
@@ -629,7 +629,7 @@
           <div class="info" style="margin-top:10px">Para que suene aunque el teléfono esté en silencio, sigue la guía de configuración del teléfono (Android: importancia “Urgente” y excepción de No molestar).</div></div>
           <div class="card"><h3>Cambiar contraseña</h3>${claveForm(false).replace('class="card"', '')}</div>
           <button class="btn sec full" data-act="salir">Cerrar sesión</button>
-          <p class="muted small" style="text-align:center">SafetyAlert · ${esc(CFG.empresa || '')}</p>`;
+          <p class="muted small" style="text-align:center">Safety Alert · ${esc(CFG.empresa || '')}</p>`;
       }
     }
   };
